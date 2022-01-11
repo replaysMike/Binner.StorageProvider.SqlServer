@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Binner.Model.Common;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
-using System.Linq;
 using TypeSupport;
 using TypeSupport.Extensions;
 
@@ -11,15 +8,13 @@ namespace Binner.StorageProvider.SqlServer
     public class SqlServerSchemaGenerator<T>
     {
         private string _dbName;
-        private ExtendedType _dbType;
         private ICollection<ExtendedProperty> _tables;
 
         public SqlServerSchemaGenerator(string databaseName)
         {
             _dbName = databaseName;
-            _dbType = typeof(T).GetExtendedType();
             var properties = typeof(T).GetProperties(PropertyOptions.HasGetter);
-            _tables = properties.Where(x => x.Type.GetExtendedType().IsCollection).ToList();
+            _tables = properties.Where(x => x.Type.IsCollection).ToList();
         }
 
         public string CreateDatabaseIfNotExists()
@@ -51,7 +46,7 @@ SELECT @tablesCreated;
             var tableSchemas = new List<string>();
             foreach (var tableProperty in _tables)
             {
-                var tableExtendedType = tableProperty.Type.GetExtendedType();
+                var tableExtendedType = tableProperty.Type;
                 var columnProps = tableExtendedType.ElementType.GetProperties(PropertyOptions.HasGetter);
                 var tableSchema = new List<string>();
                 foreach (var columnProp in columnProps)
@@ -64,7 +59,7 @@ SELECT @tablesCreated;
         private string GetColumnSchema(ExtendedProperty prop)
         {
             var columnSchema = "";
-            var propExtendedType = prop.Type.GetExtendedType();
+            var propExtendedType = prop.Type;
             var maxLength = GetMaxLength(prop);
             if (propExtendedType.IsCollection)
             {
@@ -106,7 +101,7 @@ SELECT @tablesCreated;
                         columnSchema = $"{prop.Name} varbinary({maxLength})";
                         break;
                     default:
-                        throw new InvalidOperationException($"Unsupported data type: {prop.Type}");
+                        throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Unsupported data type: {prop.Type}");
                 }
             }
             if (prop.CustomAttributes.ToList().Any(x => x.AttributeType == typeof(KeyAttribute)))

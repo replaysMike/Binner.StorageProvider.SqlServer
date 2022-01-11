@@ -1,12 +1,8 @@
 ﻿using Binner.Model.Common;
 using Microsoft.Data.SqlClient;
-using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Threading.Tasks;
 using TypeSupport.Extensions;
 
 namespace Binner.StorageProvider.SqlServer
@@ -24,7 +20,17 @@ namespace Binner.StorageProvider.SqlServer
         public SqlServerStorageProvider(IDictionary<string, string> config)
         {
             _config = new SqlServerStorageConfiguration(config);
-            Task.Run(async () => await GenerateDatabaseIfNotExistsAsync<IBinnerDb>()).GetAwaiter().GetResult();
+            try
+            {
+                // run synchronously
+                GenerateDatabaseIfNotExistsAsync<IBinnerDb>()
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception ex)
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Failed to generate database! {ex.GetType().Name} = {ex.Message}", ex);
+            }
         }
 
         /// <summary>
@@ -64,7 +70,7 @@ namespace Binner.StorageProvider.SqlServer
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
-            var query = 
+            var query =
 $@"SELECT * FROM Parts 
 WHERE Quantity <= LowStockThreshold AND (@UserId IS NULL OR UserId = @UserId)
 ORDER BY 
@@ -141,7 +147,7 @@ VALUES(@Name, @Description, @Location, @Color, @UserId, @DateCreatedUtc);
         public async Task<ICollection<SearchResult<Part>>> FindPartsAsync(string keywords, IUserContext userContext)
         {
             // basic ranked search by Michael Brown :)
-            var query = 
+            var query =
 $@"WITH PartsExactMatch (PartId, Rank) AS
 (
 SELECT PartId, 10 as Rank FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId) AND 
@@ -293,8 +299,8 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             {
                 binFilter = $" AND {request.By} = '{request.Value}'";
             }
-            
-            var query = 
+
+            var query =
 $@"SELECT * FROM Parts 
 WHERE (@UserId IS NULL OR UserId = @UserId) {binFilter}
 ORDER BY 
@@ -357,7 +363,7 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
-            var query = 
+            var query =
 $@"SELECT * FROM Projects 
 WHERE (@UserId IS NULL OR UserId = @UserId) 
 ORDER BY 
@@ -416,7 +422,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             }
             else
             {
-                throw new ArgumentException($"Record not found for {nameof(Part)} = {part.PartId}");
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(Part)} = {part.PartId}");
             }
             return part;
         }
@@ -433,7 +439,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             }
             else
             {
-                throw new ArgumentException($"Record not found for {nameof(PartType)} = {partType.PartTypeId}");
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(PartType)} = {partType.PartTypeId}");
             }
             return partType;
         }
@@ -450,7 +456,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             }
             else
             {
-                throw new ArgumentException($"Record not found for {nameof(Project)} = {project.ProjectId}");
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(Project)} = {project.ProjectId}");
             }
             return project;
         }
@@ -515,7 +521,11 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
                 {
                     sqlCmd.Parameters.AddRange(CreateParameters(parameters));
                     sqlCmd.CommandType = CommandType.Text;
-                    result = (T)await sqlCmd.ExecuteScalarAsync();
+                    var untypedResult = await sqlCmd.ExecuteScalarAsync();
+                    if (untypedResult != DBNull.Value)
+                        result = (T)untypedResult;
+                    else
+                        return default(T);
                 }
                 connection.Close();
             }
@@ -546,7 +556,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             if (extendedType.IsDictionary)
             {
                 var t = record as IDictionary<string, object>;
-                foreach(var p in t)
+                foreach (var p in t)
                 {
                     var key = p.Key;
                     var val = p.Value;
@@ -606,36 +616,29 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             var connectionStringBuilder = new SqlConnectionStringBuilder(_config.ConnectionString);
             var schemaGenerator = new SqlServerSchemaGenerator<T>(connectionStringBuilder.InitialCatalog);
             var modified = 0;
-            try
+            // Ensure database exists
+            var query = schemaGenerator.CreateDatabaseIfNotExists();
+            using (var connection = new SqlConnection(GetMasterDbConnectionString(_config.ConnectionString)))
             {
-                // Ensure database exists
-                var query = schemaGenerator.CreateDatabaseIfNotExists();
-                using (var connection = new SqlConnection(GetMasterDbConnectionString(_config.ConnectionString)))
+                connection.Open();
+                using (var sqlCmd = new SqlCommand(query, connection))
                 {
-                    connection.Open();
-                    using (var sqlCmd = new SqlCommand(query, connection))
-                    {
-                        modified = (int)await sqlCmd.ExecuteScalarAsync();
-                    }
-                    connection.Close();
+                    modified = (int)await sqlCmd.ExecuteScalarAsync();
                 }
-                // Ensure table schema exists
-                query = schemaGenerator.CreateTableSchemaIfNotExists();
-                using (var connection = new SqlConnection(_config.ConnectionString))
-                {
-                    connection.Open();
-                    using (var sqlCmd = new SqlCommand(query, connection))
-                    {
-                        modified = (int)await sqlCmd.ExecuteScalarAsync();
-                    }
-                    connection.Close();
-                }
-                if (modified > 0) await SeedInitialDataAsync();
+                connection.Close();
             }
-            catch (Exception)
+            // Ensure table schema exists
+            query = schemaGenerator.CreateTableSchemaIfNotExists();
+            using (var connection = new SqlConnection(_config.ConnectionString))
             {
-                throw;
+                connection.Open();
+                using (var sqlCmd = new SqlCommand(query, connection))
+                {
+                    modified = (int)await sqlCmd.ExecuteScalarAsync();
+                }
+                connection.Close();
             }
+            if (modified > 0) await SeedInitialDataAsync();
 
             return modified > 0;
         }
@@ -664,8 +667,10 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
 
         private string GetMasterDbConnectionString(string connectionString)
         {
-            var builder = new SqlConnectionStringBuilder(connectionString);
-            builder.InitialCatalog = "master";
+            var builder = new SqlConnectionStringBuilder(connectionString)
+            {
+                InitialCatalog = "master"
+            };
             return builder.ToString();
         }
 
