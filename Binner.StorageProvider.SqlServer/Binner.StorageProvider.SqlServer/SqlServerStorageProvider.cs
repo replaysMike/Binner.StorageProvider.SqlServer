@@ -127,21 +127,21 @@ VALUES(@Name, @Description, @Location, @Color, @UserId, @DateCreatedUtc);
         {
             part.UserId = userContext?.UserId;
             var query = $"DELETE FROM Parts WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
-            return await ExecuteAsync<Part>(query, part) > 0;
+            return await ExecuteAsync(query, part) > 0;
         }
 
         public async Task<bool> DeletePartTypeAsync(PartType partType, IUserContext userContext)
         {
             partType.UserId = userContext?.UserId;
             var query = $"DELETE FROM PartTypes WHERE PartTypeId = @PartTypeId AND (@UserId IS NULL OR UserId = @UserId);";
-            return await ExecuteAsync<PartType>(query, partType) > 0;
+            return await ExecuteAsync(query, partType) > 0;
         }
 
         public async Task<bool> DeleteProjectAsync(Project project, IUserContext userContext)
         {
             project.UserId = userContext?.UserId;
             var query = $"DELETE FROM Projects WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
-            return await ExecuteAsync<Project>(query, project) > 0;
+            return await ExecuteAsync(query, project) > 0;
         }
 
         public async Task<ICollection<SearchResult<Part>>> FindPartsAsync(string keywords, IUserContext userContext)
@@ -285,7 +285,7 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
         private WhereCondition TranslatePredicateToSql(Expression<Func<Part, bool>> predicate)
         {
             var builder = new SqlWhereExpressionBuilder();
-            var sql = builder.ToParameterizedSql<Part>(predicate);
+            var sql = builder.ToParameterizedSql(predicate);
             return sql;
         }
 
@@ -418,7 +418,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             if (result.Any())
             {
                 query = $"UPDATE Parts SET Quantity = @Quantity, LowStockThreshold = @LowStockThreshold, Cost = @Cost, PartNumber = @PartNumber, PackageType = @PackageType, MountingTypeId = @MountingTypeId, DigiKeyPartNumber = @DigiKeyPartNumber, MouserPartNumber = @MouserPartNumber, Description = @Description, PartTypeId = @PartTypeId, ProjectId = @ProjectId, Keywords = @Keywords, DatasheetUrl = @DatasheetUrl, Location = @Location, BinNumber = @BinNumber, BinNumber2 = @BinNumber2, ProductUrl = @ProductUrl, ImageUrl = @ImageUrl, LowestCostSupplier = @LowestCostSupplier, LowestCostSupplierUrl = @LowestCostSupplierUrl, Manufacturer = @Manufacturer, ManufacturerPartNumber = @ManufacturerPartNumber WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
-                await ExecuteAsync<Part>(query, part);
+                await ExecuteAsync(query, part);
             }
             else
             {
@@ -435,7 +435,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             if (result.Any())
             {
                 query = $"UPDATE PartTypes SET Name = @Name, ParentPartTypeId = @ParentPartTypeId WHERE PartTypeId = @PartTypeId AND (@UserId IS NULL OR UserId = @UserId);";
-                await ExecuteAsync<PartType>(query, partType);
+                await ExecuteAsync(query, partType);
             }
             else
             {
@@ -452,7 +452,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             if (result.Any())
             {
                 query = $"UPDATE Projects SET Name = @Name, Description = @Description, Location = @Location, Color = @Color WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
-                await ExecuteAsync<Project>(query, project);
+                await ExecuteAsync(query, project);
             }
             else
             {
@@ -577,7 +577,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return parameters.ToArray();
         }
 
-        private object MapToPropertyValue(object obj, Type destinationType)
+        private static object MapToPropertyValue(object obj, Type destinationType)
         {
             if (obj == DBNull.Value) return null;
 
@@ -592,7 +592,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             }
         }
 
-        private object MapFromPropertyValue(object obj)
+        private static object MapFromPropertyValue(object obj)
         {
             if (obj == null) return DBNull.Value;
 
@@ -665,7 +665,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return modified > 0;
         }
 
-        private string GetMasterDbConnectionString(string connectionString)
+        private static string GetMasterDbConnectionString(string connectionString)
         {
             var builder = new SqlConnectionStringBuilder(connectionString)
             {
