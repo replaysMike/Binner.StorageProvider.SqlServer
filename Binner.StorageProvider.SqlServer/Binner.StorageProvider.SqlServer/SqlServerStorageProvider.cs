@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlTypes;
 using System.Linq.Expressions;
 using TypeSupport.Extensions;
+using static Binner.Model.Common.SystemDefaults;
 
 namespace Binner.StorageProvider.SqlServer
 {
@@ -651,7 +652,16 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             var modified = 0;
             foreach (var partType in defaultPartTypes.EnumValues)
             {
-                query += $"INSERT INTO PartTypes (Name, DateCreatedUtc) VALUES('{partType.Value}', GETUTCDATE());\r\n";
+                int? parentPartTypeId = null;
+                var partTypeEnum = (DefaultPartTypes)partType.Key;
+                var field = typeof(DefaultPartTypes).GetField(partType.Value);
+                if (field.IsDefined(typeof(ParentPartTypeAttribute), false))
+                {
+                    var customAttribute = Attribute.GetCustomAttribute(field, typeof(ParentPartTypeAttribute)) as ParentPartTypeAttribute;
+                    parentPartTypeId = (int)customAttribute.Parent;
+                }
+
+                query += $"INSERT INTO PartTypes (Name, ParentPartTypeId, DateCreatedUtc) VALUES('{partType.Value}', {parentPartTypeId?.ToString() ?? "null"}, GETUTCDATE());\r\n";
             }
             using (var connection = new SqlConnection(_config.ConnectionString))
             {
