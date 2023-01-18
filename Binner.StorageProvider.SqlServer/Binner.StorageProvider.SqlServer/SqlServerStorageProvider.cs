@@ -88,7 +88,7 @@ namespace Binner.StorageProvider.SqlServer
                 UserId = userContext?.UserId
             };
             var countQuery = $"SELECT COUNT(*) FROM Parts WHERE Quantity <= LowStockThreshold AND (@UserId IS NULL OR UserId = @UserId);";
-            var totalPages = await ExecuteScalarAsync<int>(countQuery, parameters);
+            var totalItems = await ExecuteScalarAsync<int>(countQuery, parameters);
 
             var query =
 $@"SELECT * FROM Parts 
@@ -111,7 +111,7 @@ CASE WHEN @OrderBy = 'ManufacturerPartNumber' THEN ManufacturerPartNumber ELSE N
 CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDirection} 
 OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             var result = await SqlQueryAsync<Part>(query, parameters);
-            return new PaginatedResponse<Part>(totalPages, result);
+            return new PaginatedResponse<Part>(totalItems, request.Results, request.Page, result);
         }
 
         public async Task<Part> AddPartAsync(Part part, IUserContext userContext)
@@ -316,7 +316,7 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             };
 
             var countQuery = $"SELECT COUNT(*) FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId) {binFilter};";
-            var totalPages = await ExecuteScalarAsync<int>(countQuery, parameters);
+            var totalItems = await ExecuteScalarAsync<int>(countQuery, parameters);
 
             var query =
 $@"SELECT * FROM Parts 
@@ -340,7 +340,7 @@ CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDir
 OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             var result = await SqlQueryAsync<Part>(query, parameters);
 
-            return new PaginatedResponse<Part>(totalPages, result.ToList());
+            return new PaginatedResponse<Part>(totalItems, request.Results, request.Page, result.ToList());
         }
 
         public async Task<PartType> GetPartTypeAsync(long partTypeId, IUserContext userContext)
