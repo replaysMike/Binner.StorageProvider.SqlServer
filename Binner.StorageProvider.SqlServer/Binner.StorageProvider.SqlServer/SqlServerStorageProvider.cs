@@ -74,10 +74,22 @@ namespace Binner.StorageProvider.SqlServer
             return result;
         }
 
-        public async Task<ICollection<Part>> GetLowStockAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<PaginatedResponse<Part>> GetLowStockAsync(PaginatedRequest request, IUserContext userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
+
+            var parameters = new
+            {
+                Results = request.Results,
+                Page = request.Page,
+                OrderBy = request.OrderBy,
+                Direction = request.Direction,
+                UserId = userContext?.UserId
+            };
+            var countQuery = $"SELECT COUNT(*) FROM Parts WHERE Quantity <= LowStockThreshold AND (@UserId IS NULL OR UserId = @UserId);";
+            var totalPages = await ExecuteScalarAsync<int>(countQuery, parameters);
+
             var query =
 $@"SELECT * FROM Parts 
 WHERE Quantity <= LowStockThreshold AND (@UserId IS NULL OR UserId = @UserId)
@@ -98,15 +110,8 @@ CASE WHEN @OrderBy = 'Manufacturer' THEN Manufacturer ELSE NULL END {sortDirecti
 CASE WHEN @OrderBy = 'ManufacturerPartNumber' THEN ManufacturerPartNumber ELSE NULL END {sortDirection}, 
 CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDirection} 
 OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
-            var result = await SqlQueryAsync<Part>(query, new
-            {
-                Results = request.Results,
-                Page = request.Page,
-                OrderBy = request.OrderBy,
-                Direction = request.Direction,
-                UserId = userContext?.UserId
-            });
-            return result;
+            var result = await SqlQueryAsync<Part>(query, parameters);
+            return new PaginatedResponse<Part>(totalPages, result);
         }
 
         public async Task<Part> AddPartAsync(Part part, IUserContext userContext)
@@ -290,7 +295,7 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             return sql;
         }
 
-        public async Task<ICollection<Part>> GetPartsAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<PaginatedResponse<Part>> GetPartsAsync(PaginatedRequest request, IUserContext userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
@@ -300,6 +305,18 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             {
                 binFilter = $" AND {request.By} = '{request.Value}'";
             }
+
+            var parameters = new
+            {
+                Results = request.Results,
+                Page = request.Page,
+                OrderBy = request.OrderBy,
+                Direction = request.Direction,
+                UserId = userContext?.UserId
+            };
+
+            var countQuery = $"SELECT COUNT(*) FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId) {binFilter};";
+            var totalPages = await ExecuteScalarAsync<int>(countQuery, parameters);
 
             var query =
 $@"SELECT * FROM Parts 
@@ -321,15 +338,9 @@ CASE WHEN @OrderBy = 'Manufacturer' THEN Manufacturer ELSE NULL END {sortDirecti
 CASE WHEN @OrderBy = 'ManufacturerPartNumber' THEN ManufacturerPartNumber ELSE NULL END {sortDirection}, 
 CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDirection} 
 OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
-            var result = await SqlQueryAsync<Part>(query, new
-            {
-                Results = request.Results,
-                Page = request.Page,
-                OrderBy = request.OrderBy,
-                Direction = request.Direction,
-                UserId = userContext?.UserId
-            });
-            return result.ToList();
+            var result = await SqlQueryAsync<Part>(query, parameters);
+
+            return new PaginatedResponse<Part>(totalPages, result.ToList());
         }
 
         public async Task<PartType> GetPartTypeAsync(long partTypeId, IUserContext userContext)
