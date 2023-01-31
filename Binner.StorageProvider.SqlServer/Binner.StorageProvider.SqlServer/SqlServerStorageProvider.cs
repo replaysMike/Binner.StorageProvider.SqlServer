@@ -533,6 +533,30 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return result.ToList();
         }
 
+        public async Task<bool> DeleteStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        {
+            storedFile.UserId = userContext?.UserId;
+            var query = $"DELETE FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
+            return await ExecuteAsync(query, storedFile) > 0;
+        }
+
+        public async Task<StoredFile> UpdateStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        {
+            storedFile.UserId = userContext?.UserId;
+            var query = $"SELECT StoredFileId FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, storedFile);
+            if (result.Any())
+            {
+                query = $"UPDATE StoredFiles SET FileName = @FileName, OriginalFileName = @OriginalFileName, StoredFileType = @StoredFileType, PartId = @PartId, FileLength = @FileLength, Crc32 = @Crc32 WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
+                await ExecuteAsync(query, storedFile);
+            }
+            else
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(StoredFile)} = {storedFile.StoredFileId}");
+            }
+            return storedFile;
+        }
+
         private async Task<T> InsertAsync<T, TKey>(string query, T parameters, Action<T, TKey> keySetter)
         {
             using (var connection = new SqlConnection(_config.ConnectionString))
