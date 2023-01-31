@@ -473,6 +473,66 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return project;
         }
 
+        public async Task<StoredFile> AddStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        {
+            storedFile.UserId = userContext?.UserId;
+            var query =
+$@"INSERT INTO StoredFiles (FileName, OriginalFileName, StoredFileType, PartId, FileLength, Crc32, UserId, DateCreatedUtc) 
+output INSERTED.StoredFileId 
+VALUES(@FileName, @OriginalFileName, @StoredFileType, @PartId, @FileLength, @Crc32, @UserId, @DateCreatedUtc);
+";
+            return await InsertAsync<StoredFile, long>(query, storedFile, (x, key) => { x.StoredFileId = key; });
+        }
+
+        public async Task<StoredFile> GetStoredFileAsync(long storedFileId, IUserContext userContext)
+        {
+            var query = $"SELECT * FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, new { StoredFileId = storedFileId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<StoredFile> GetStoredFileAsync(string filename, IUserContext userContext)
+        {
+            var query = $"SELECT * FROM StoredFiles WHERE Filename = @Filename AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, new { Filename = filename, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(long partId, StoredFileType? fileType, IUserContext userContext)
+        {
+            var query = $@"SELECT * FROM StoredFiles WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, new { PartId = partId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(PaginatedRequest request, IUserContext userContext)
+        {
+            var offsetRecords = (request.Page - 1) * request.Results;
+            var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
+            var query =
+$@"SELECT * FROM StoredFiles 
+WHERE (@UserId IS NULL OR UserId = @UserId) 
+ORDER BY 
+CASE WHEN @OrderBy IS NULL THEN StoredFileId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'FileName' THEN FileName ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'OriginalFileName' THEN OriginalFileName ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'StoredFileType' THEN StoredFileType ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'PartId' THEN PartId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'FileLength' THEN FileLength ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'Crc32' THEN Crc32 ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDirection} 
+OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
+            var result = await SqlQueryAsync<StoredFile>(query, new
+            {
+                Results = request.Results,
+                Page = request.Page,
+                OrderBy = request.OrderBy,
+                Direction = request.Direction,
+                UserId = userContext?.UserId
+            });
+            return result.ToList();
+        }
+
         private async Task<T> InsertAsync<T, TKey>(string query, T parameters, Action<T, TKey> keySetter)
         {
             using (var connection = new SqlConnection(_config.ConnectionString))
