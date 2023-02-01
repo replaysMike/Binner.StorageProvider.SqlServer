@@ -11,7 +11,7 @@
     <RepositoryUrl>https://github.com/replaysMike/Binner.StorageProvider.Postgresql</RepositoryUrl>
     <PackageTags>binner storage provider sql server mssql refactor michael brown</PackageTags>
     <PackageReleaseNotes>Sql Server storage provider for Binner</PackageReleaseNotes>
-    <Version>1.0.11</Version>
+    <Version>1.0.22</Version>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Binner.Model.Common" Version="1.0.21" />
+    <PackageReference Include="Binner.Model.Common" Version="1.0.22" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="4.0.0" />
     <PackageReference Include="TypeSupport" Version="1.1.12" />
   </ItemGroup>
