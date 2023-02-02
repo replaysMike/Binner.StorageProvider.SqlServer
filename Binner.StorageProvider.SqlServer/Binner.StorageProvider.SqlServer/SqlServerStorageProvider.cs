@@ -24,7 +24,7 @@ namespace Binner.StorageProvider.SqlServer
             try
             {
                 // run synchronously
-                GenerateDatabaseIfNotExistsAsync<IBinnerDb>()
+                GenerateDatabaseIfNotExistsAsync<BinnerDbV2>()
                     .GetAwaiter()
                     .GetResult();
             }

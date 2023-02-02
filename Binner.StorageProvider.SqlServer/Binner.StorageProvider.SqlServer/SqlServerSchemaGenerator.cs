@@ -100,6 +100,9 @@ SELECT @tablesCreated;
                     case var p when p.NullableBaseType == typeof(byte[]):
                         columnSchema = $"{prop.Name} varbinary({maxLength})";
                         break;
+                    case var p when p.NullableBaseType.IsEnum:
+                        columnSchema = $"{prop.Name} integer";
+                        break;
                     default:
                         throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Unsupported data type: {prop.Type}");
                 }
