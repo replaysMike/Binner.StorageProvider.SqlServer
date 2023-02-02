@@ -1,5 +1,6 @@
 ﻿using Binner.Model.Common;
 using Microsoft.Data.SqlClient;
+using System.ComponentModel;
 using System.Data;
 using System.Data.SqlTypes;
 using System.Linq.Expressions;
@@ -17,6 +18,7 @@ namespace Binner.StorageProvider.SqlServer
 
         private readonly SqlServerStorageConfiguration _config;
         private bool _isDisposed;
+        private string _databaseName = "Binner";
 
         public SqlServerStorageProvider(IDictionary<string, string> config)
         {
@@ -51,6 +53,22 @@ namespace Binner.StorageProvider.SqlServer
                 FirstPartId = parts.OrderBy(x => x.PartId).First().PartId,
                 LastPartId = parts.OrderBy(x => x.PartId).Last().PartId,
             };
+        }
+
+        public async Task<ConnectionResponse> TestConnectionAsync()
+        {
+            try
+            {
+                using var connection = new SqlConnection(_config.ConnectionString);
+                connection.Open();
+                using var sqlCmd = new SqlCommand($"SELECT db_id(N'{_databaseName}')", connection);
+                var dbId = (int?)await sqlCmd.ExecuteScalarAsync();
+                return new ConnectionResponse { IsSuccess = true, DatabaseExists = dbId != null, Errors = new List<string>() };
+            }
+            catch (Exception ex)
+            {
+                return new ConnectionResponse { IsSuccess = false, Errors = new List<string>() { ex.GetBaseException().Message } };
+            }
         }
 
         public async Task<long> GetPartsCountAsync(IUserContext userContext)
@@ -710,7 +728,8 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
         private async Task<bool> GenerateDatabaseIfNotExistsAsync<T>()
         {
             var connectionStringBuilder = new SqlConnectionStringBuilder(_config.ConnectionString);
-            var schemaGenerator = new SqlServerSchemaGenerator<T>(connectionStringBuilder.InitialCatalog);
+            _databaseName = !string.IsNullOrEmpty(connectionStringBuilder.InitialCatalog) ? connectionStringBuilder.InitialCatalog : "Binner";
+            var schemaGenerator = new SqlServerSchemaGenerator<T>(_databaseName);
             var modified = 0;
             // Ensure database exists
             var query = schemaGenerator.CreateDatabaseIfNotExists();
