@@ -61,7 +61,7 @@ namespace Binner.StorageProvider.SqlServer
             {
                 using var connection = new SqlConnection(_config.ConnectionString);
                 connection.Open();
-                using var sqlCmd = new SqlCommand($"SELECT db_id(N'{_databaseName}')", connection);
+                using var sqlCmd = new SqlCommand($"SELECT CAST(db_id(N'{_databaseName}') AS int)", connection);
                 var dbId = (int?)await sqlCmd.ExecuteScalarAsync();
                 return new ConnectionResponse { IsSuccess = true, DatabaseExists = dbId != null, Errors = new List<string>() };
             }
