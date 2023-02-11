@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Version>1.0.30</Version>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -11,7 +12,6 @@
     <RepositoryUrl>https://github.com/replaysMike/Binner.StorageProvider.Postgresql</RepositoryUrl>
     <PackageTags>binner storage provider sql server mssql refactor michael brown</PackageTags>
     <PackageReleaseNotes>Sql Server storage provider for Binner</PackageReleaseNotes>
-    <Version>1.0.29</Version>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -24,8 +24,15 @@
     <None Include="binner.png" Pack="true" PackagePath="" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(Configuration)'=='Debug' AND Exists('..\..\..\Binner.Model.Common\Binner.Model.Common\Binner.Model.Common.csproj')">
+    <ProjectReference Include="..\..\..\Binner.Model.Common\Binner.Model.Common\Binner.Model.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)'!='Debug' OR !Exists('..\..\..\..\Binner.Model.Common\Binner.Model.Common\Binner.Model.Common.csproj')">
+    <PackageReference Include="Binner.Model.Common" Version="$(Version)" />
+  </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="Binner.Model.Common" Version="1.0.29" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="4.0.0" />
     <PackageReference Include="TypeSupport" Version="1.1.12" />
   </ItemGroup>
