@@ -97,6 +97,12 @@ SELECT @tablesCreated;
                     case var p when p.NullableBaseType == typeof(TimeSpan):
                         columnSchema = $"{prop.Name} time";
                         break;
+                    case var p when p.NullableBaseType == typeof(Guid):
+                        columnSchema = $"{prop.Name} uniqueidentifier";
+                        break;
+                    case var p when p.NullableBaseType == typeof(bool):
+                        columnSchema = $"{prop.Name} bit";
+                        break;
                     case var p when p.NullableBaseType == typeof(byte[]):
                         columnSchema = $"{prop.Name} varbinary({maxLength})";
                         break;
