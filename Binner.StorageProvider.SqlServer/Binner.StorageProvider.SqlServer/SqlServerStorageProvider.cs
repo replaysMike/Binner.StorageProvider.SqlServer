@@ -39,7 +39,7 @@ namespace Binner.StorageProvider.SqlServer
         /// Get an instance of the entire database
         /// </summary>
         /// <returns></returns>
-        public async Task<IBinnerDb> GetDatabaseAsync(IUserContext userContext)
+        public async Task<IBinnerDb> GetDatabaseAsync(IUserContext? userContext)
         {
             var parts = await GetPartsAsync();
             return new BinnerDbV1
@@ -70,28 +70,28 @@ namespace Binner.StorageProvider.SqlServer
             }
         }
 
-        public async Task<long> GetPartsCountAsync(IUserContext userContext)
+        public async Task<long> GetPartsCountAsync(IUserContext? userContext)
         {
             var query = $"SELECT SUM(Quantity) FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId);";
             var result = await ExecuteScalarAsync<long>(query, new { UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<long> GetUniquePartsCountAsync(IUserContext userContext)
+        public async Task<long> GetUniquePartsCountAsync(IUserContext? userContext)
         {
             var query = $"SELECT COUNT_BIG(*) FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId);";
             var result = await ExecuteScalarAsync<long>(query, new { UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<decimal> GetPartsValueAsync(IUserContext userContext)
+        public async Task<decimal> GetPartsValueAsync(IUserContext? userContext)
         {
             var query = $"SELECT SUM(Cost * Quantity) FROM Parts WHERE (@UserId IS NULL OR UserId = @UserId);";
             var result = await ExecuteScalarAsync<decimal>(query, new { UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<PaginatedResponse<Part>> GetLowStockAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<PaginatedResponse<Part>> GetLowStockAsync(PaginatedRequest request, IUserContext? userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
@@ -131,7 +131,7 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return new PaginatedResponse<Part>(totalItems, request.Results, request.Page, result);
         }
 
-        public async Task<Part> AddPartAsync(Part part, IUserContext userContext)
+        public async Task<Part> AddPartAsync(Part part, IUserContext? userContext)
         {
             part.UserId = userContext?.UserId;
             var query =
@@ -142,7 +142,7 @@ VALUES(@Quantity, @LowStockThreshold, @PartNumber, @PackageType, @MountingTypeId
             return await InsertAsync<Part, long>(query, part, (x, key) => { x.PartId = key; });
         }
 
-        public async Task<Project> AddProjectAsync(Project project, IUserContext userContext)
+        public async Task<Project> AddProjectAsync(Project project, IUserContext? userContext)
         {
             project.UserId = userContext?.UserId;
             var query =
@@ -153,28 +153,28 @@ VALUES(@Name, @Description, @Location, @Color, @UserId, @DateCreatedUtc);
             return await InsertAsync<Project, long>(query, project, (x, key) => { x.ProjectId = key; });
         }
 
-        public async Task<bool> DeletePartAsync(Part part, IUserContext userContext)
+        public async Task<bool> DeletePartAsync(Part part, IUserContext? userContext)
         {
             part.UserId = userContext?.UserId;
             var query = $"DELETE FROM Parts WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
             return await ExecuteAsync(query, part) > 0;
         }
 
-        public async Task<bool> DeletePartTypeAsync(PartType partType, IUserContext userContext)
+        public async Task<bool> DeletePartTypeAsync(PartType partType, IUserContext? userContext)
         {
             partType.UserId = userContext?.UserId;
             var query = $"DELETE FROM PartTypes WHERE PartTypeId = @PartTypeId AND (@UserId IS NULL OR UserId = @UserId);";
             return await ExecuteAsync(query, partType) > 0;
         }
 
-        public async Task<bool> DeleteProjectAsync(Project project, IUserContext userContext)
+        public async Task<bool> DeleteProjectAsync(Project project, IUserContext? userContext)
         {
             project.UserId = userContext?.UserId;
             var query = $"DELETE FROM Projects WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
             return await ExecuteAsync(query, project) > 0;
         }
 
-        public async Task<ICollection<SearchResult<Part>>> FindPartsAsync(string keywords, IUserContext userContext)
+        public async Task<ICollection<SearchResult<Part>>> FindPartsAsync(string keywords, IUserContext? userContext)
         {
             // basic ranked search by Michael Brown :)
             var query =
@@ -234,21 +234,21 @@ INNER JOIN (
             return result.Select(x => new SearchResult<Part>(x as Part, x.Rank)).OrderBy(x => x.Rank).ToList();
         }
 
-        private async Task<ICollection<OAuthCredential>> GetOAuthCredentialAsync(IUserContext userContext)
+        private async Task<ICollection<OAuthCredential>> GetOAuthCredentialAsync(IUserContext? userContext)
         {
             var query = $"SELECT * FROM OAuthCredentials WHERE (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<OAuthCredential>(query, new { UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<OAuthCredential?> GetOAuthCredentialAsync(string providerName, IUserContext userContext)
+        public async Task<OAuthCredential?> GetOAuthCredentialAsync(string providerName, IUserContext? userContext)
         {
             var query = $"SELECT * FROM OAuthCredentials WHERE Provider = @ProviderName AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<OAuthCredential>(query, new { ProviderName = providerName, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<PartType?> GetOrCreatePartTypeAsync(PartType partType, IUserContext userContext)
+        public async Task<PartType?> GetOrCreatePartTypeAsync(PartType partType, IUserContext? userContext)
         {
             partType.UserId = userContext?.UserId;
             var query = $"SELECT PartTypeId FROM PartTypes WHERE Name = @Name AND (@UserId IS NULL OR UserId = @UserId);";
@@ -268,21 +268,21 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             return partType;
         }
 
-        public async Task<ICollection<PartType>> GetPartTypesAsync(IUserContext userContext)
+        public async Task<ICollection<PartType>> GetPartTypesAsync(IUserContext? userContext)
         {
             var query = $"SELECT * FROM PartTypes WHERE (@UserId IS NULL OR UserId = @UserId) OR UserId IS NULL;";
             var result = await SqlQueryAsync<PartType>(query, new { UserId = userContext?.UserId });
             return result.ToList();
         }
 
-        public async Task<Part?> GetPartAsync(long partId, IUserContext userContext)
+        public async Task<Part?> GetPartAsync(long partId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM Parts WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<Part>(query, new { PartId = partId, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<Part?> GetPartAsync(string partNumber, IUserContext userContext)
+        public async Task<Part?> GetPartAsync(string partNumber, IUserContext? userContext)
         {
             var query = $"SELECT * FROM Parts WHERE PartNumber = @PartNumber AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<Part>(query, new { PartNumber = partNumber, UserId = userContext?.UserId });
@@ -296,7 +296,7 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             return result;
         }
 
-        public async Task<ICollection<Part>> GetPartsAsync(Expression<Func<Part, bool>> predicate, IUserContext userContext)
+        public async Task<ICollection<Part>> GetPartsAsync(Expression<Func<Part, bool>> predicate, IUserContext? userContext)
         {
             var conditionalQuery = TranslatePredicateToSql(predicate);
             var query = $"SELECT * FROM Parts WHERE {conditionalQuery.Sql} AND (@UserId IS NULL OR UserId = @UserId);";
@@ -312,7 +312,7 @@ VALUES (@ParentPartTypeId, @Name, @UserId, @DateCreatedUtc);";
             return sql;
         }
 
-        public async Task<PaginatedResponse<Part>> GetPartsAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<PaginatedResponse<Part>> GetPartsAsync(PaginatedRequest request, IUserContext? userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
@@ -360,35 +360,35 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return new PaginatedResponse<Part>(totalItems, request.Results, request.Page, result.ToList());
         }
 
-        public async Task<PartType?> GetPartTypeAsync(long partTypeId, IUserContext userContext)
+        public async Task<PartType?> GetPartTypeAsync(long partTypeId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM PartTypes WHERE PartTypeId = @PartTypeId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<PartType>(query, new { PartTypeId = partTypeId, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<Project?> GetProjectAsync(long projectId, IUserContext userContext)
+        public async Task<Project?> GetProjectAsync(long projectId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM Projects WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<Project>(query, new { ProjectId = projectId, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<Project?> GetProjectAsync(string projectName, IUserContext userContext)
+        public async Task<Project?> GetProjectAsync(string projectName, IUserContext? userContext)
         {
             var query = $"SELECT * FROM Projects WHERE Name = @Name AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<Project>(query, new { Name = projectName, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        private async Task<ICollection<Project>> GetProjectsAsync(IUserContext userContext)
+        private async Task<ICollection<Project>> GetProjectsAsync(IUserContext? userContext)
         {
             var query = $@"SELECT * FROM Projects WHERE @UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<Project>(query, new { UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<ICollection<Project>> GetProjectsAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<ICollection<Project>> GetProjectsAsync(PaginatedRequest request, IUserContext? userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
@@ -413,13 +413,13 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return result.ToList();
         }
 
-        public async Task RemoveOAuthCredentialAsync(string providerName, IUserContext userContext)
+        public async Task RemoveOAuthCredentialAsync(string providerName, IUserContext? userContext)
         {
             var query = $"DELETE FROM OAuthCredentials WHERE Provider = @Provider AND (@UserId IS NULL OR UserId = @UserId);";
             await ExecuteAsync<object>(query, new { Provider = providerName, UserId = userContext?.UserId });
         }
 
-        public async Task<OAuthCredential> SaveOAuthCredentialAsync(OAuthCredential credential, IUserContext userContext)
+        public async Task<OAuthCredential> SaveOAuthCredentialAsync(OAuthCredential credential, IUserContext? userContext)
         {
             credential.UserId = userContext?.UserId;
             var query = @"SELECT Provider FROM OAuthCredentials WHERE Provider = @Provider AND (@UserId IS NULL OR UserId = @UserId);";
@@ -439,7 +439,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return credential;
         }
 
-        public async Task<Part> UpdatePartAsync(Part part, IUserContext userContext)
+        public async Task<Part> UpdatePartAsync(Part part, IUserContext? userContext)
         {
             part.UserId = userContext?.UserId;
             var query = $"SELECT PartId FROM Parts WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
@@ -456,7 +456,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return part;
         }
 
-        public async Task<PartType> UpdatePartTypeAsync(PartType partType, IUserContext userContext)
+        public async Task<PartType> UpdatePartTypeAsync(PartType partType, IUserContext? userContext)
         {
             partType.UserId = userContext?.UserId;
             var query = $"SELECT PartTypeId FROM PartTypes WHERE PartTypeId = @PartTypeId AND (@UserId IS NULL OR UserId = @UserId);";
@@ -473,7 +473,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return partType;
         }
 
-        public async Task<Project> UpdateProjectAsync(Project project, IUserContext userContext)
+        public async Task<Project> UpdateProjectAsync(Project project, IUserContext? userContext)
         {
             project.UserId = userContext?.UserId;
             var query = $"SELECT ProjectId FROM Projects WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
@@ -490,7 +490,7 @@ VALUES (@Provider, @AccessToken, @RefreshToken, @DateCreatedUtc, @DateExpiresUtc
             return project;
         }
 
-        public async Task<StoredFile> AddStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        public async Task<StoredFile> AddStoredFileAsync(StoredFile storedFile, IUserContext? userContext)
         {
             storedFile.UserId = userContext?.UserId;
             var query =
@@ -501,28 +501,28 @@ VALUES(@FileName, @OriginalFileName, @StoredFileType, @PartId, @FileLength, @Crc
             return await InsertAsync<StoredFile, long>(query, storedFile, (x, key) => { x.StoredFileId = key; });
         }
 
-        public async Task<StoredFile?> GetStoredFileAsync(long storedFileId, IUserContext userContext)
+        public async Task<StoredFile?> GetStoredFileAsync(long storedFileId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<StoredFile>(query, new { StoredFileId = storedFileId, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<StoredFile?> GetStoredFileAsync(string filename, IUserContext userContext)
+        public async Task<StoredFile?> GetStoredFileAsync(string filename, IUserContext? userContext)
         {
             var query = $"SELECT * FROM StoredFiles WHERE Filename = @Filename AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<StoredFile>(query, new { Filename = filename, UserId = userContext?.UserId });
             return result.FirstOrDefault();
         }
 
-        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(long partId, StoredFileType? fileType, IUserContext userContext)
+        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(long partId, StoredFileType? fileType, IUserContext? userContext)
         {
             var query = $@"SELECT * FROM StoredFiles WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<StoredFile>(query, new { PartId = partId, UserId = userContext?.UserId });
             return result;
         }
 
-        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(PaginatedRequest request, IUserContext userContext)
+        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(PaginatedRequest request, IUserContext? userContext)
         {
             var offsetRecords = (request.Page - 1) * request.Results;
             var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
@@ -550,14 +550,14 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return result.ToList();
         }
 
-        public async Task<bool> DeleteStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        public async Task<bool> DeleteStoredFileAsync(StoredFile storedFile, IUserContext? userContext)
         {
             storedFile.UserId = userContext?.UserId;
             var query = $"DELETE FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
             return await ExecuteAsync(query, storedFile) > 0;
         }
 
-        public async Task<StoredFile> UpdateStoredFileAsync(StoredFile storedFile, IUserContext userContext)
+        public async Task<StoredFile> UpdateStoredFileAsync(StoredFile storedFile, IUserContext? userContext)
         {
             storedFile.UserId = userContext?.UserId;
             var query = $"SELECT StoredFileId FROM StoredFiles WHERE StoredFileId = @StoredFileId AND (@UserId IS NULL OR UserId = @UserId);";
@@ -574,7 +574,7 @@ OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
             return storedFile;
         }
 
-        public async Task<OAuthAuthorization> CreateOAuthRequestAsync(OAuthAuthorization authRequest, IUserContext userContext)
+        public async Task<OAuthAuthorization> CreateOAuthRequestAsync(OAuthAuthorization authRequest, IUserContext? userContext)
         {
             var oAuthRequest = new OAuthRequest
             {
@@ -598,7 +598,7 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             return authRequest;
         }
 
-        public async Task<OAuthAuthorization> UpdateOAuthRequestAsync(OAuthAuthorization authRequest, IUserContext userContext)
+        public async Task<OAuthAuthorization> UpdateOAuthRequestAsync(OAuthAuthorization authRequest, IUserContext? userContext)
         {
             var oAuthRequest = new OAuthRequest
             {
@@ -626,7 +626,7 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             return authRequest;
         }
 
-        public async Task<OAuthAuthorization?> GetOAuthRequestAsync(Guid requestId, IUserContext userContext)
+        public async Task<OAuthAuthorization?> GetOAuthRequestAsync(Guid requestId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM OAuthRequests WHERE RequestId = @RequestId AND (@UserId IS NULL OR UserId = @UserId);";
             var result = await SqlQueryAsync<OAuthRequest>(query, new { RequestId = requestId, UserId = userContext?.UserId });
@@ -636,8 +636,8 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             return new OAuthAuthorization(oAuthRequest.Provider, oAuthRequest.RequestId)
             {
                 UserId = userContext?.UserId,
-                Error = oAuthRequest.Error,
-                ErrorDescription = oAuthRequest.ErrorDescription,
+                Error = oAuthRequest.Error ?? string.Empty,
+                ErrorDescription = oAuthRequest.ErrorDescription ?? string.Empty,
                 AuthorizationReceived = false,
                 ReturnToUrl = oAuthRequest.ReturnToUrl ?? string.Empty,
             };
@@ -693,9 +693,9 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             return results;
         }
 
-        private async Task<T> ExecuteScalarAsync<T>(string query, object? parameters = null)
+        private async Task<T?> ExecuteScalarAsync<T>(string query, object? parameters = null)
         {
-            T result;
+            T? result;
             using (var connection = new SqlConnection(_config.ConnectionString))
             {
                 connection.Open();
@@ -705,7 +705,7 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
                     sqlCmd.CommandType = CommandType.Text;
                     var untypedResult = await sqlCmd.ExecuteScalarAsync();
                     if (untypedResult != DBNull.Value)
-                        result = (T)untypedResult;
+                        result = (T?)untypedResult;
                     else
                         return default(T);
                 }
@@ -738,12 +738,15 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             if (extendedType.IsDictionary)
             {
                 var t = record as IDictionary<string, object>;
-                foreach (var p in t)
+                if (t != null)
                 {
-                    var key = p.Key;
-                    var val = p.Value;
-                    var propertyMapped = MapFromPropertyValue(val);
-                    parameters.Add(new SqlParameter(key.ToString(), propertyMapped));
+                    foreach (var p in t)
+                    {
+                        var key = p.Key;
+                        var val = p.Value;
+                        var propertyMapped = MapFromPropertyValue(val);
+                        parameters.Add(new SqlParameter(key.ToString(), propertyMapped));
+                    }
                 }
             }
             else
@@ -761,14 +764,14 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
 
         private static object? MapToPropertyValue(object? obj, Type destinationType)
         {
-            if (obj == DBNull.Value) return null;
+            if (obj == DBNull.Value || obj == null) return null;
 
             var objType = destinationType.GetExtendedType();
             switch (objType)
             {
                 case var p when p.IsCollection:
                 case var a when a.IsArray:
-                    return obj?.ToString().Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
+                    return obj.ToString()?.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries);
                 default:
                     return obj;
             }
@@ -837,10 +840,11 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
                 int? parentPartTypeId = null;
                 var partTypeEnum = (DefaultPartTypes)partType.Key;
                 var field = typeof(DefaultPartTypes).GetField(partType.Value);
-                if (field.IsDefined(typeof(ParentPartTypeAttribute), false))
+                if (field != null && field.IsDefined(typeof(ParentPartTypeAttribute), false))
                 {
                     var customAttribute = Attribute.GetCustomAttribute(field, typeof(ParentPartTypeAttribute)) as ParentPartTypeAttribute;
-                    parentPartTypeId = (int)customAttribute.Parent;
+                    if (customAttribute != null)
+                        parentPartTypeId = (int)customAttribute.Parent;
                 }
 
                 query += $"INSERT INTO PartTypes (Name, ParentPartTypeId, DateCreatedUtc) VALUES('{partType.Value}', {parentPartTypeId?.ToString() ?? "null"}, GETUTCDATE());\r\n";

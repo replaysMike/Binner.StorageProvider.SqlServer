@@ -130,7 +130,7 @@ SELECT @tablesCreated;
             var maxLength = "max";
             if (maxLengthAttr != null)
             {
-                maxLength = maxLengthAttr.ConstructorArguments.First().Value.ToString();
+                maxLength = maxLengthAttr.ConstructorArguments.First().Value?.ToString() ?? "max";
             }
             return maxLength;
         }

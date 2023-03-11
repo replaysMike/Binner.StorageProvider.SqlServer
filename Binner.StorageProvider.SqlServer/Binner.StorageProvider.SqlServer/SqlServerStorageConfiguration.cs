@@ -4,7 +4,7 @@ namespace Binner.StorageProvider.SqlServer
 {
     public class SqlServerStorageConfiguration
     {
-        public string ConnectionString { get; set; }
+        public string ConnectionString { get; set; } = string.Empty;
 
         public SqlServerStorageConfiguration()
         {
