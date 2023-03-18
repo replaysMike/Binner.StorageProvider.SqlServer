@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.0.31</Version>
+    <Version>1.0.32</Version>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -34,7 +34,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="4.0.0" />
-    <PackageReference Include="TypeSupport" Version="1.1.12" />
+    <PackageReference Include="TypeSupport" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

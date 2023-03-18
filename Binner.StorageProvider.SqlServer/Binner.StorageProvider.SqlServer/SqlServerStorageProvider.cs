@@ -25,7 +25,7 @@ namespace Binner.StorageProvider.SqlServer
             try
             {
                 // run synchronously
-                GenerateDatabaseIfNotExistsAsync<BinnerDbV3>()
+                GenerateDatabaseIfNotExistsAsync<BinnerDbV4>()
                     .GetAwaiter()
                     .GetResult();
             }
@@ -42,12 +42,18 @@ namespace Binner.StorageProvider.SqlServer
         public async Task<IBinnerDb> GetDatabaseAsync(IUserContext? userContext)
         {
             var parts = await GetPartsAsync();
-            return new BinnerDbV1
+            return new BinnerDbV4
             {
                 OAuthCredentials = await GetOAuthCredentialAsync(userContext),
                 Parts = parts,
                 PartTypes = await GetPartTypesAsync(userContext),
                 Projects = await GetProjectsAsync(userContext),
+                StoredFiles = await GetStoredFilesAsync(userContext),
+                OAuthRequests = await GetOAuthRequestsAsync(userContext),
+                Pcbs = await GetPcbsAsync(userContext),
+                PcbStoredFileAssignments = await GetPcbStoredFileAssignmentsAsync(userContext),
+                ProjectPartAssignments = await GetProjectPartAssignmentsAsync(userContext),
+                ProjectPcbAssignments = await GetProjectPcbAssignmentsAsync(userContext),
                 Count = parts.Count,
                 FirstPartId = parts.OrderBy(x => x.PartId).First().PartId,
                 LastPartId = parts.OrderBy(x => x.PartId).Last().PartId,
@@ -515,10 +521,17 @@ VALUES(@FileName, @OriginalFileName, @StoredFileType, @PartId, @FileLength, @Crc
             return result.FirstOrDefault();
         }
 
+        public async Task<ICollection<StoredFile>> GetStoredFilesAsync(IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM StoredFiles WHERE (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, new { UserId = userContext?.UserId });
+            return result;
+        }
+
         public async Task<ICollection<StoredFile>> GetStoredFilesAsync(long partId, StoredFileType? fileType, IUserContext? userContext)
         {
-            var query = $@"SELECT * FROM StoredFiles WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
-            var result = await SqlQueryAsync<StoredFile>(query, new { PartId = partId, UserId = userContext?.UserId });
+            var query = $@"SELECT * FROM StoredFiles WHERE PartId = @PartId AND StoredFileType = @StoredFileType AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<StoredFile>(query, new { PartId = partId, StoredFileType = fileType, UserId = userContext?.UserId });
             return result;
         }
 
@@ -626,6 +639,12 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
             return authRequest;
         }
 
+        public async Task<ICollection<OAuthRequest>> GetOAuthRequestsAsync(IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM OAuthRequests WHERE (@UserId IS NULL OR UserId = @UserId);";
+            return await SqlQueryAsync<OAuthRequest>(query, new { UserId = userContext?.UserId });
+        }
+
         public async Task<OAuthAuthorization?> GetOAuthRequestAsync(Guid requestId, IUserContext? userContext)
         {
             var query = $"SELECT * FROM OAuthRequests WHERE RequestId = @RequestId AND (@UserId IS NULL OR UserId = @UserId);";
@@ -642,6 +661,288 @@ VALUES(@AuthorizationCode, @AuthorizationReceived, @Error, @ErrorDescription, @P
                 ReturnToUrl = oAuthRequest.ReturnToUrl ?? string.Empty,
             };
         }
+
+        #region BinnerDb V4
+
+        public async Task<Pcb?> GetPcbAsync(long pcbId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM Pcbs WHERE PcbId = @PcbId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<Pcb>(query, new { PcbId = pcbId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ICollection<Pcb>> GetPcbsAsync(long projectId, IUserContext? userContext)
+        {
+            var query = $"SELECT p.* FROM ProjectPcbAssignments a INNER JOIN Pcbs p ON p.PcbId=a.PcbId WHERE a.ProjectId=@ProjectId AND (@UserId IS NULL OR p.UserId = @UserId);";
+            var result = await SqlQueryAsync<Pcb>(query, new { ProjectId = projectId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<Pcb>> GetPcbsAsync(IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM Pcbs WHERE (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<Pcb>(query, new { UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<Pcb> AddPcbAsync(Pcb pcb, IUserContext? userContext)
+        {
+            pcb.UserId = userContext?.UserId;
+            var query =
+                $@"INSERT INTO Pcbs (Name, Description, SerialNumberFormat, LastSerialNumber, UserId, DateCreatedUtc, DateModifiedUtc) 
+output INSERTED.PcbId 
+VALUES(@Name, @Description, @SerialNumberFormat, @LastSerialNumber, @UserId, @DateCreatedUtc, @DateModifiedUtc);
+";
+            return await InsertAsync<Pcb, long>(query, pcb, (x, key) => { x.PcbId = key; });
+        }
+
+        public async Task<Pcb> UpdatePcbAsync(Pcb pcb, IUserContext? userContext)
+        {
+            if (pcb == null) throw new ArgumentNullException(nameof(pcb));
+            pcb.UserId = userContext?.UserId;
+            var query = $"SELECT PcbId FROM Pcbs WHERE PcbId = @PcbId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<Pcb>(query, pcb);
+            if (result.Any())
+            {
+                query = $"UPDATE Pcbs SET Name = @Name, Description = @Description, SerialNumberFormat = @SerialNumberFormat, LastSerialNumber = @LastSerialNumber, DateModifiedUtc = @DateModifiedUtc WHERE PcbId = @PcbId AND (@UserId IS NULL OR UserId = @UserId);";
+                await ExecuteAsync(query, pcb);
+            }
+            else
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(Pcb)} = {pcb.PcbId}");
+            }
+            return pcb;
+        }
+
+        public async Task<bool> DeletePcbAsync(Pcb pcb, IUserContext? userContext)
+        {
+            pcb.UserId = userContext?.UserId;
+            var query = $"DELETE FROM Pcbs WHERE PcbId = @PcbId AND (@UserId IS NULL OR UserId = @UserId);";
+            return await ExecuteAsync(query, pcb) > 0;
+        }
+
+        public async Task<PcbStoredFileAssignment?> GetPcbStoredFileAssignmentAsync(long pcbStoredFileAssignmentId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM PcbStoredFileAssignments WHERE PcbStoredFileAssignmentId = @PcbStoredFileAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<PcbStoredFileAssignment>(query, new { PcbStoredFileAssignmentId = pcbStoredFileAssignmentId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ICollection<PcbStoredFileAssignment>> GetPcbStoredFileAssignmentsAsync(IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM PcbStoredFileAssignments WHERE (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<PcbStoredFileAssignment>(query, new { UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<PcbStoredFileAssignment>> GetPcbStoredFileAssignmentsAsync(long pcbId, IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM PcbStoredFileAssignments WHERE PcbId = @PcbId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<PcbStoredFileAssignment>(query, new { PcbId = pcbId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<PcbStoredFileAssignment> AddPcbStoredFileAssignmentAsync(PcbStoredFileAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query =
+                $@"INSERT INTO PcbStoredFileAssignments (PcbId, StoredFileId, Name, Notes, UserId, DateCreatedUtc, DateModifiedUtc) 
+output INSERTED.PcbStoredFileAssignmentId 
+VALUES(@PcbId, @StoredFileId, @Name, @Notes, @UserId, @DateCreatedUtc, @DateModifiedUtc);
+";
+            return await InsertAsync<PcbStoredFileAssignment, long>(query, assignment, (x, key) => { x.PcbStoredFileAssignmentId = key; });
+        }
+
+        public async Task<PcbStoredFileAssignment> UpdatePcbStoredFileAssignmentAsync(PcbStoredFileAssignment assignment, IUserContext? userContext)
+        {
+            if (assignment == null) throw new ArgumentNullException(nameof(assignment));
+            assignment.UserId = userContext?.UserId;
+            var query = $"SELECT PcbStoredFileAssignmentId FROM PcbStoredFileAssignments WHERE PcbStoredFileAssignmentId = @PcbStoredFileAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<Pcb>(query, assignment);
+            if (result.Any())
+            {
+                query = $"UPDATE PcbStoredFileAssignments SET PcbId = @PcbId, StoredFileId = @StoredFileId, Name = @Name, Notes = @Notes, DateModifiedUtc = @DateModifiedUtc WHERE PcbStoredFileAssignmentId = @PcbStoredFileAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+                await ExecuteAsync(query, assignment);
+            }
+            else
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(PcbStoredFileAssignment)} = {assignment.PcbStoredFileAssignmentId}");
+            }
+            return assignment;
+        }
+
+        public async Task<bool> RemovePcbStoredFileAssignmentAsync(PcbStoredFileAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query = $"DELETE FROM PcbStoredFileAssignments WHERE PcbStoredFileAssignmentId = @PcbStoredFileAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            return await ExecuteAsync(query, assignment) > 0;
+        }
+
+        public async Task<ICollection<ProjectPartAssignment>> GetPartAssignmentsAsync(long partId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM ProjectPartAssignments WHERE PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { PartId = partId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ProjectPartAssignment?> GetProjectPartAssignmentAsync(long projectPartAssignmentId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM ProjectPartAssignments WHERE ProjectPartAssignmentId = @ProjectPartAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { ProjectPartAssignmentId = projectPartAssignmentId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ProjectPartAssignment?> GetProjectPartAssignmentAsync(long projectId, long partId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM ProjectPartAssignments WHERE ProjectId = @ProjectId AND PartId = @PartId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { ProjectId = projectId, PartId = partId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ProjectPartAssignment?> GetProjectPartAssignmentAsync(long projectId, string partName, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM ProjectPartAssignments WHERE ProjectId = @ProjectId AND PartName = @PartName AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { ProjectId = projectId, PartName = partName, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ICollection<ProjectPartAssignment>> GetProjectPartAssignmentsAsync(IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM ProjectPartAssignments WHERE (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<ProjectPartAssignment>> GetProjectPartAssignmentsAsync(long projectId, IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM ProjectPartAssignments WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new { ProjectId = projectId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<ProjectPartAssignment>> GetProjectPartAssignmentsAsync(long projectId, PaginatedRequest request, IUserContext? userContext)
+        {
+            var offsetRecords = (request.Page - 1) * request.Results;
+            var sortDirection = request.Direction == SortDirection.Ascending ? "ASC" : "DESC";
+            var query =
+                $@"SELECT * FROM ProjectPartAssignments 
+WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId) 
+ORDER BY 
+CASE WHEN @OrderBy IS NULL THEN ProjectId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'PartId' THEN PartId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'PcbId' THEN PcbId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'PartName' THEN PartName ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'Notes' THEN Notes ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'ReferenceId' THEN ReferenceId ELSE NULL END {sortDirection}, 
+CASE WHEN @OrderBy = 'DateCreatedUtc' THEN DateCreatedUtc ELSE NULL END {sortDirection},
+CASE WHEN @OrderBy = 'DateModifiedUtc' THEN DateModifiedUtc ELSE NULL END {sortDirection} 
+OFFSET {offsetRecords} ROWS FETCH NEXT {request.Results} ROWS ONLY;";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, new
+            {
+                ProjectId = projectId,
+                Results = request.Results,
+                Page = request.Page,
+                OrderBy = request.OrderBy,
+                Direction = request.Direction,
+                UserId = userContext?.UserId
+            });
+            return result.ToList();
+        }
+
+        public async Task<ProjectPartAssignment> AddProjectPartAssignmentAsync(ProjectPartAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query =
+                $@"INSERT INTO ProjectPartAssignments (ProjectId, PartId, PcbId, PartName, Quantity, Notes, ReferenceId, UserId, DateCreatedUtc, DateModifiedUtc) 
+output INSERTED.ProjectPartAssignmentId 
+VALUES(@ProjectId, @PartId, @PcbId, @PartName, @Quantity, @Notes, @ReferenceId, @UserId, @DateCreatedUtc, @DateModifiedUtc);
+";
+            return await InsertAsync<ProjectPartAssignment, long>(query, assignment, (x, key) => { x.ProjectPartAssignmentId = key; });
+        }
+
+        public async Task<ProjectPartAssignment> UpdateProjectPartAssignmentAsync(ProjectPartAssignment assignment, IUserContext? userContext)
+        {
+            if (assignment == null) throw new ArgumentNullException(nameof(assignment));
+            assignment.UserId = userContext?.UserId;
+            var query = $"SELECT ProjectPartAssignmentId FROM ProjectPartAssignments WHERE ProjectPartAssignmentId = @ProjectPartAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPartAssignment>(query, assignment);
+            if (result.Any())
+            {
+                query = $"UPDATE ProjectPartAssignments SET ProjectId = @ProjectId, PartId = @PartId, PcbId = @PcbId, PartName = @PartName, Quantity = @Quantity, Notes = @Notes, ReferenceId = @ReferenceId, DateModifiedUtc = @DateModifiedUtc WHERE ProjectPartAssignmentId = @ProjectPartAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+                await ExecuteAsync(query, assignment);
+            }
+            else
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(ProjectPartAssignment)} = {assignment.ProjectPartAssignmentId}");
+            }
+            return assignment;
+        }
+
+        public async Task<bool> RemoveProjectPartAssignmentAsync(ProjectPartAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query = $"DELETE FROM ProjectPartAssignments WHERE ProjectPartAssignmentId = @ProjectPartAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            return await ExecuteAsync(query, assignment) > 0;
+        }
+
+        public async Task<ProjectPcbAssignment?> GetProjectPcbAssignmentAsync(long projectPcbAssignmentId, IUserContext? userContext)
+        {
+            var query = $"SELECT * FROM ProjectPcbAssignments WHERE ProjectPcbAssignmentId = @ProjectPcbAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPcbAssignment>(query, new { ProjectPcbAssignmentId = projectPcbAssignmentId, UserId = userContext?.UserId });
+            return result.FirstOrDefault();
+        }
+
+        public async Task<ICollection<ProjectPcbAssignment>> GetProjectPcbAssignmentsAsync(IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM ProjectPcbAssignments WHERE (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPcbAssignment>(query, new { UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ICollection<ProjectPcbAssignment>> GetProjectPcbAssignmentsAsync(long projectId, IUserContext? userContext)
+        {
+            var query = $@"SELECT * FROM ProjectPcbAssignments WHERE ProjectId = @ProjectId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPcbAssignment>(query, new { ProjectId = projectId, UserId = userContext?.UserId });
+            return result;
+        }
+
+        public async Task<ProjectPcbAssignment> AddProjectPcbAssignmentAsync(ProjectPcbAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query =
+                $@"INSERT INTO ProjectPcbAssignments (ProjectId, PcbId, UserId, DateCreatedUtc) 
+output INSERTED.ProjectPcbAssignmentId 
+VALUES(@ProjectId, @PcbId, @UserId, @DateCreatedUtc);
+";
+            return await InsertAsync<ProjectPcbAssignment, long>(query, assignment, (x, key) => { x.ProjectPcbAssignmentId = key; });
+        }
+
+        public async Task<ProjectPcbAssignment> UpdateProjectPcbAssignmentAsync(ProjectPcbAssignment assignment, IUserContext? userContext)
+        {
+            if (assignment == null) throw new ArgumentNullException(nameof(assignment));
+            assignment.UserId = userContext?.UserId;
+            var query = $"SELECT ProjectPcbAssignmentId FROM ProjectPcbAssignments WHERE ProjectPcbAssignmentId = @ProjectPcbAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            var result = await SqlQueryAsync<ProjectPcbAssignment>(query, assignment);
+            if (result.Any())
+            {
+                query = $"UPDATE ProjectPcbAssignments SET ProjectId = @ProjectId, PcbId = @PcbId, DateModifiedUtc = @DateModifiedUtc WHERE ProjectPcbAssignmentId = @ProjectPcbAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+                await ExecuteAsync(query, assignment);
+            }
+            else
+            {
+                throw new StorageProviderException(nameof(SqlServerStorageProvider), $"Record not found for {nameof(ProjectPcbAssignment)} = {assignment.ProjectPcbAssignmentId}");
+            }
+            return assignment;
+        }
+
+        public async Task<bool> RemoveProjectPcbAssignmentAsync(ProjectPcbAssignment assignment, IUserContext? userContext)
+        {
+            assignment.UserId = userContext?.UserId;
+            var query = $"DELETE FROM ProjectPcbAssignments WHERE ProjectPcbAssignmentId = @ProjectPcbAssignmentId AND (@UserId IS NULL OR UserId = @UserId);";
+            return await ExecuteAsync(query, assignment) > 0;
+        }
+
+        #endregion
 
         private async Task<T> InsertAsync<T, TKey>(string query, T parameters, Action<T, TKey> keySetter)
         {
